@@ -235,7 +235,7 @@ class SignalOverlay(QWidget):
         min_label.setStyleSheet("color: #a6adc8; font-size: 10px;")
         min_layout.addWidget(min_label)
         
-        self.min_confidence_label = QLabel("88%")
+        self.min_confidence_label = QLabel("83%")
         self.min_confidence_label.setObjectName("min_confidence_label")
         min_layout.addWidget(self.min_confidence_label)
         
@@ -346,7 +346,7 @@ class SignalOverlay(QWidget):
         layout.addWidget(self.entry_btn)
         
         # ===== INSTRUCOES =====
-        instructions = QLabel("Analisa 6 ativos | Mostra sinal >= 88% | M1/M5")
+        instructions = QLabel("Analisa 6 ativos | Mostra sinal >= 82% | M1/M5")
         instructions.setStyleSheet("color: #585b70; font-size: 10px;")
         instructions.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(instructions)
