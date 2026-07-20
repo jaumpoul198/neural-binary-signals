@@ -1,0 +1,198 @@
+{
+  "app": {
+    "name": "Neural Binary Signals",
+    "version": "2.0.0",
+    "mode": "manual"
+  },
+  "pairs": {
+    "otc": [
+      "EURUSD-OTC",
+      "GBPUSD-OTC",
+      "USDJPY-OTC",
+      "AUDUSD-OTC",
+      "USDCAD-OTC",
+      "EURGBP-OTC",
+      "EURJPY-OTC",
+      "GBPJPY-OTC"
+    ],
+    "open_market": [
+      "EURUSD",
+      "GBPUSD",
+      "USDJPY",
+      "AUDUSD",
+      "USDCAD",
+      "EURGBP",
+      "EURJPY",
+      "GBPJPY",
+      "NZDUSD",
+      "USDCHF",
+      "XAUUSD",
+      "US30"
+    ]
+  },
+  "timeframes": {
+    "M1": {
+      "seconds": 60,
+      "description": "1 Minuto"
+    },
+    "M5": {
+      "seconds": 300,
+      "description": "5 Minutos"
+    },
+    "M15": {
+      "seconds": 900,
+      "description": "15 Minutos"
+    }
+  },
+  "indicators": {
+    "rsi": {
+      "enabled": true,
+      "period": 14,
+      "overbought": 70,
+      "oversold": 30,
+      "weight": 1.0
+    },
+    "macd": {
+      "enabled": true,
+      "fast": 12,
+      "slow": 26,
+      "signal": 9,
+      "weight": 1.2
+    },
+    "bollinger_bands": {
+      "enabled": true,
+      "period": 20,
+      "std_dev": 2.0,
+      "weight": 1.0
+    },
+    "vwap": {
+      "enabled": true,
+      "weight": 0.8
+    },
+    "stochastic": {
+      "enabled": true,
+      "k_period": 14,
+      "d_period": 3,
+      "smooth": 3,
+      "overbought": 80,
+      "oversold": 20,
+      "weight": 0.9
+    },
+    "volume_profile": {
+      "enabled": true,
+      "lookback": 50,
+      "weight": 0.7
+    },
+    "atr": {
+      "enabled": true,
+      "period": 14,
+      "weight": 0.6
+    },
+    "ema": {
+      "enabled": true,
+      "periods": [
+        9,
+        21,
+        50
+      ],
+      "weight": 1.0
+    },
+    "adx": {
+      "enabled": true,
+      "period": 14,
+      "strong_trend": 25,
+      "weight": 0.8
+    },
+    "cci": {
+      "enabled": true,
+      "period": 20,
+      "overbought": 100,
+      "oversold": -100,
+      "weight": 0.7
+    },
+    "williams_r": {
+      "enabled": true,
+      "period": 14,
+      "overbought": -20,
+      "oversold": -80,
+      "weight": 0.7
+    },
+    "momentum": {
+      "enabled": true,
+      "period": 10,
+      "weight": 0.6
+    },
+    "obv": {
+      "enabled": true,
+      "weight": 0.5
+    },
+    "ichimoku": {
+      "enabled": true,
+      "tenkan": 9,
+      "kijun": 26,
+      "senkou": 52,
+      "weight": 1.1
+    },
+    "fibonacci_retracement": {
+      "enabled": true,
+      "levels": [
+        0.236,
+        0.382,
+        0.5,
+        0.618,
+        0.786
+      ],
+      "weight": 0.9
+    }
+  },
+  "signal_engine": {
+    "min_confidence": 70,
+    "max_confidence": 100,
+    "confluence_required": 3,
+    "direction_bias": "neutral",
+    "candlestick_patterns": {
+      "enabled": true,
+      "patterns": [
+        "hammer",
+        "inverted_hammer",
+        "engulfing_bullish",
+        "engulfing_bearish",
+        "morning_star",
+        "evening_star",
+        "doji",
+        "shooting_star",
+        "harami",
+        "piercing_line"
+      ],
+      "weight": 1.3
+    }
+  },
+  "memory": {
+    "enabled": true,
+    "similarity_threshold": 0.85,
+    "max_patterns": 50000,
+    "min_history_for_prediction": 100,
+    "feature_vector_size": 64,
+    "update_frequency": "every_signal"
+  },
+  "notifications": {
+    "sound": true,
+    "desktop": true,
+    "telegram": {
+      "enabled": false,
+      "bot_token": "",
+      "chat_id": ""
+    }
+  },
+  "risk_management": {
+    "max_daily_signals": 20,
+    "cooldown_between_signals_seconds": 60,
+    "avoid_news_times": true,
+    "news_times": [
+      "08:30",
+      "14:30"
+    ],
+    "volatility_filter": true,
+    "max_atr_multiplier": 3.0
+  }
+}
