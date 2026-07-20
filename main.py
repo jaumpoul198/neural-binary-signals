@@ -9,11 +9,11 @@ import argparse
 def main():
     parser = argparse.ArgumentParser(description="Neural Binary Signals")
     parser.add_argument('--mode', choices=['dashboard', 'terminal', 'overlay'], 
-                        default='dashboard',
+                        default='overlay',
                         help='Modo de execução')
-    parser.add_argument('--pair', default='EURUSD',
+    parser.add_argument('--pair', default='USD/JPY',
                         help='Par para monitorar')
-    parser.add_argument('--timeframe', default='M5',
+    parser.add_argument('--timeframe', default='M1',
                         help='Timeframe (M1, M5, M15)')
     
     args = parser.parse_args()

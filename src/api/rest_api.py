@@ -7,6 +7,7 @@ import pandas as pd
 import numpy as np
 import logging
 import uvicorn
+import time
 
 from ..core import DecisionEngine
 
@@ -42,7 +43,7 @@ class SignalResponse(BaseModel):
 
 def generate_synthetic_data(n=100, trend=0.1):
     """Gera dados sintéticos para teste"""
-    np.random.seed(42)
+    np.random.seed(int(time.time()) % 1000)
     prices = 100 + np.cumsum(np.random.randn(n) * 0.5 + trend)
     prices = np.maximum(prices, 50)
     
@@ -65,19 +66,11 @@ async def health():
 @app.post("/signal", response_model=SignalResponse)
 async def generate_signal(request: SignalRequest):
     try:
-        # Tenta yfinance
-        try:
-            import yfinance as yf
-            data = yf.download(request.symbol, period='5d', interval=request.timeframe.lower())
-            if len(data) < 50:
-                data = generate_synthetic_data(100)
-                logger.warning(f"Usando dados sintéticos para {request.symbol}")
-        except:
-            data = generate_synthetic_data(100)
-            logger.warning(f"Usando dados sintéticos para {request.symbol}")
+        logger.info(f"Gerando sinal para {request.symbol}")
         
-        if len(data) < 50:
-            data = generate_synthetic_data(100)
+        # SEMPRE usa dados sintéticos
+        data = generate_synthetic_data(100)
+        logger.info(f"Usando dados sintéticos para {request.symbol}")
         
         signal = engine.analyze(data, symbol=request.symbol, timeframe=request.timeframe, is_otc=request.is_otc)
         
@@ -97,6 +90,7 @@ async def generate_signal(request: SignalRequest):
     except HTTPException:
         raise
     except Exception as e:
+        logger.error(f"Erro: {e}")
         raise HTTPException(500, str(e))
 
 @app.get("/signal/{symbol}")

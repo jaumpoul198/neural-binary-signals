@@ -1,304 +1,334 @@
-"""Dashboard Visual em PyQt6"""
+"""
+Dashboard Neural Binary Signals
+Interface gráfica para monitoramento de sinais
+"""
+
 import sys
-from PyQt6.QtWidgets import (
-    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QLabel, QPushButton, QTableWidget, QTableWidgetItem, QComboBox,
-    QProgressBar, QGroupBox, QGridLayout, QTextEdit, QSplitter
-)
-from PyQt6.QtCore import QTimer, Qt, pyqtSignal, QThread
-from PyQt6.QtGui import QColor, QFont
-import pyqtgraph as pg
-import numpy as np
+import json
 from datetime import datetime
+from PyQt5.QtWidgets import *
+from PyQt5.QtCore import *
+from PyQt5.QtGui import *
 
-from ..core.engine import SignalEngine
-from ..signals.manager import SignalManager
-from ..signals.notifier import SignalNotifier
-
+from ..core import DecisionEngine
+import pandas as pd
+import numpy as np
+import threading
+import time
 
 class SignalWorker(QThread):
+    """Thread para gerar sinais em background"""
     signal_ready = pyqtSignal(dict)
-    stats_update = pyqtSignal(dict)
-
-    def __init__(self, engine: SignalEngine, pairs: list, timeframe: str):
+    
+    def __init__(self, engine, symbol, timeframe):
         super().__init__()
         self.engine = engine
-        self.pairs = pairs
+        self.symbol = symbol
         self.timeframe = timeframe
         self.running = True
-
+        
     def run(self):
         while self.running:
-            for pair in self.pairs:
-                if not self.running:
-                    break
-                signal = self.engine.analyze_pair(pair, self.timeframe)
+            try:
+                # Gera dados sintéticos
+                np.random.seed(int(time.time()))
+                prices = 100 + np.cumsum(np.random.randn(100) * 0.5)
+                data = pd.DataFrame({
+                    'open': prices[:-1],
+                    'high': prices[:-1] + np.abs(np.random.randn(99) * 0.3),
+                    'low': prices[:-1] - np.abs(np.random.randn(99) * 0.3),
+                    'close': prices[1:],
+                    'volume': np.random.randint(1000, 5000, 99)
+                })
+                
+                signal = self.engine.analyze(data, self.symbol, self.timeframe)
                 if signal:
-                    self.signal_ready.emit(signal)
-
-            stats = self.engine.get_stats()
-            self.stats_update.emit(stats)
-            self.msleep(5000)
-
+                    self.signal_ready.emit({
+                        'symbol': self.symbol,
+                        'type': signal.signal_type.value,
+                        'confidence': signal.confidence,
+                        'strength': signal.strength.value,
+                        'reasons': signal.reasons[:3],
+                        'timestamp': signal.timestamp.strftime('%H:%M:%S')
+                    })
+                time.sleep(5)
+            except Exception as e:
+                print(f"Erro: {e}")
+                time.sleep(2)
+    
     def stop(self):
         self.running = False
 
 
-class SignalDashboard(QMainWindow):
+class Dashboard(QMainWindow):
+    """Janela principal do dashboard"""
+    
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Neural Binary Signals v2.0")
-        self.setGeometry(100, 100, 1400, 900)
-
-        self.engine = SignalEngine()
-        self.manager = SignalManager()
-        self.notifier = SignalNotifier()
-
-        self.worker = None
+        self.engine = DecisionEngine()
+        self.setWindowTitle("📊 Neural Binary Signals")
+        self.setGeometry(100, 100, 1200, 700)
+        self.setStyleSheet(self.get_styles())
+        
+        self.symbols = ["EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "BTC", "ETH"]
+        self.timeframes = ["M1", "M5", "M15"]
+        self.selected_symbol = "EURUSD"
+        self.selected_timeframe = "M5"
+        self.workers = {}
+        self.signals_history = []
+        
         self.init_ui()
-        self.apply_dark_theme()
-
+        self.start_all()
+    
+    def get_styles(self):
+        return """
+            QMainWindow { background-color: #1e1e2e; }
+            QLabel { color: #cdd6f4; font-size: 14px; }
+            QPushButton {
+                background-color: #45475a;
+                color: #cdd6f4;
+                border: none;
+                padding: 10px 20px;
+                border-radius: 8px;
+                font-weight: bold;
+                font-size: 14px;
+            }
+            QPushButton:hover { background-color: #585b70; }
+            QComboBox {
+                background-color: #313244;
+                color: #cdd6f4;
+                border: 1px solid #45475a;
+                border-radius: 6px;
+                padding: 8px;
+                font-size: 14px;
+            }
+            QTableWidget {
+                background-color: #313244;
+                color: #cdd6f4;
+                gridline-color: #45475a;
+                font-size: 13px;
+            }
+            QTableWidget::item { padding: 8px; }
+            QHeaderView::section {
+                background-color: #45475a;
+                color: #cdd6f4;
+                padding: 8px;
+                border: none;
+            }
+            QGroupBox {
+                color: #cdd6f4;
+                border: 2px solid #45475a;
+                border-radius: 10px;
+                margin-top: 15px;
+                font-weight: bold;
+                font-size: 14px;
+            }
+            QGroupBox::title { subcontrol-origin: margin; left: 15px; padding: 0 10px; }
+            QScrollArea { border: none; background: transparent; }
+            QListWidget {
+                background-color: #313244;
+                color: #cdd6f4;
+                border: 1px solid #45475a;
+                border-radius: 6px;
+                font-size: 13px;
+            }
+            QListWidget::item { padding: 8px; }
+            QListWidget::item:selected { background-color: #585b70; }
+        """
+    
     def init_ui(self):
+        """Configura a interface"""
         central = QWidget()
         self.setCentralWidget(central)
         layout = QVBoxLayout(central)
-
-        header = self._create_header()
-        layout.addWidget(header)
-
-        splitter = QSplitter(Qt.Orientation.Horizontal)
-        left_panel = self._create_left_panel()
-        splitter.addWidget(left_panel)
-        right_panel = self._create_right_panel()
-        splitter.addWidget(right_panel)
-        splitter.setSizes([500, 900])
-        layout.addWidget(splitter)
-
-        self.timer = QTimer()
-        self.timer.timeout.connect(self.update_ui)
-        self.timer.start(1000)
-
-    def _create_header(self):
-        widget = QWidget()
-        layout = QHBoxLayout(widget)
-
-        title = QLabel("NEURAL BINARY SIGNALS")
-        title.setFont(QFont("Inter", 20, QFont.Weight.Bold))
-        title.setStyleSheet("color: #00f5ff;")
-        layout.addWidget(title)
-
-        self.status_label = QLabel("OFFLINE")
-        self.status_label.setStyleSheet("color: #ff4444; font-weight: bold;")
-        layout.addWidget(self.status_label)
-        layout.addStretch()
-
-        self.pair_combo = QComboBox()
-        self.pair_combo.addItems([
-            "EURUSD", "GBPUSD", "USDJPY", "AUDUSD",
-            "EURUSD-OTC", "GBPUSD-OTC", "USDJPY-OTC"
-        ])
-        layout.addWidget(QLabel("Par:"))
-        layout.addWidget(self.pair_combo)
-
-        self.tf_combo = QComboBox()
-        self.tf_combo.addItems(["M1", "M5", "M15"])
-        self.tf_combo.setCurrentText("M5")
-        layout.addWidget(QLabel("TF:"))
-        layout.addWidget(self.tf_combo)
-
-        self.start_btn = QPushButton("INICIAR")
-        self.start_btn.setStyleSheet("background-color: #00ff88; color: #0f0f1a; font-weight: bold; padding: 10px 20px; border-radius: 8px;")
-        self.start_btn.clicked.connect(self.start_analysis)
-        layout.addWidget(self.start_btn)
-
-        self.stop_btn = QPushButton("PARAR")
-        self.stop_btn.setEnabled(False)
-        self.stop_btn.clicked.connect(self.stop_analysis)
-        layout.addWidget(self.stop_btn)
-
-        return widget
-
-    def _create_left_panel(self):
-        widget = QWidget()
-        layout = QVBoxLayout(widget)
-
-        signal_group = QGroupBox("SINAL ATIVO")
-        signal_layout = QVBoxLayout(signal_group)
-
-        self.signal_direction = QLabel("AGUARDANDO...")
-        self.signal_direction.setFont(QFont("Inter", 36, QFont.Weight.Bold))
-        self.signal_direction.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.signal_direction.setStyleSheet("color: #8892b0;")
-        signal_layout.addWidget(self.signal_direction)
-
-        self.signal_pair = QLabel("-")
-        self.signal_pair.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.signal_pair.setFont(QFont("Inter", 14))
-        signal_layout.addWidget(self.signal_pair)
-
-        self.signal_confidence = QProgressBar()
-        self.signal_confidence.setRange(0, 100)
-        self.signal_confidence.setValue(0)
-        self.signal_confidence.setTextVisible(True)
-        signal_layout.addWidget(self.signal_confidence)
-
-        self.signal_reasons = QTextEdit()
-        self.signal_reasons.setReadOnly(True)
-        self.signal_reasons.setMaximumHeight(150)
-        signal_layout.addWidget(self.signal_reasons)
-
-        layout.addWidget(signal_group)
-
-        stats_group = QGroupBox("ESTATISTICAS")
-        stats_layout = QGridLayout(stats_group)
-
-        self.stats_labels = {}
-        stats_data = [
-            ("Win Rate:", "0%"),
-            ("Sinais Hoje:", "0"),
-            ("Memoria Ativa:", "0"),
-            ("Pares Monitorados:", "0"),
-        ]
-
-        for i, (label, value) in enumerate(stats_data):
-            stats_layout.addWidget(QLabel(label), i, 0)
-            self.stats_labels[label] = QLabel(value)
-            self.stats_labels[label].setStyleSheet("color: #00f5ff; font-weight: bold;")
-            stats_layout.addWidget(self.stats_labels[label], i, 1)
-
-        layout.addWidget(stats_group)
-
-        history_group = QGroupBox("HISTORICO")
-        history_layout = QVBoxLayout(history_group)
-
-        self.history_table = QTableWidget()
-        self.history_table.setColumnCount(6)
-        self.history_table.setHorizontalHeaderLabels([
-            "Hora", "Par", "Direcao", "Conf.", "Resultado", "Padrao"
-        ])
-        self.history_table.setMaximumHeight(300)
-        history_layout.addWidget(self.history_table)
-
-        layout.addWidget(history_group)
-
-        return widget
-
-    def _create_right_panel(self):
-        widget = QWidget()
-        layout = QVBoxLayout(widget)
-
-        self.price_plot = pg.PlotWidget()
-        self.price_plot.setTitle("Preco em Tempo Real")
-        self.price_plot.setLabel('left', 'Preco')
-        self.price_plot.setLabel('bottom', 'Tempo')
-        self.price_plot.showGrid(x=True, y=True)
-        self.price_curve = self.price_plot.plot(pen=pg.mkPen('#00f5ff', width=2))
-        layout.addWidget(self.price_plot)
-
-        self.indicator_plot = pg.PlotWidget()
-        self.indicator_plot.setTitle("Indicadores")
-        self.indicator_plot.setMaximumHeight(200)
-        layout.addWidget(self.indicator_plot)
-
-        self.log_text = QTextEdit()
-        self.log_text.setReadOnly(True)
-        self.log_text.setMaximumHeight(150)
-        layout.addWidget(self.log_text)
-
-        return widget
-
-    def apply_dark_theme(self):
-        self.setStyleSheet("""
-            QMainWindow { background-color: #0f0f1a; }
-            QWidget { background-color: #0f0f1a; color: #e0e0e0; }
-            QGroupBox { border: 1px solid #333; border-radius: 8px; margin-top: 10px; font-weight: bold; color: #00f5ff; }
-            QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 5px; }
-            QComboBox, QPushButton { background-color: #1a1a2e; border: 1px solid #333; padding: 5px; border-radius: 4px; }
-            QTableWidget { background-color: #1a1a2e; border: 1px solid #333; gridline-color: #333; }
-            QHeaderView::section { background-color: #16213e; padding: 5px; border: 1px solid #333; }
-            QTextEdit { background-color: #1a1a2e; border: 1px solid #333; color: #e0e0e0; }
+        layout.setSpacing(15)
+        layout.setContentsMargins(20, 20, 20, 20)
+        
+        # TOPO: CONTROLES
+        top_frame = QFrame()
+        top_layout = QHBoxLayout(top_frame)
+        top_layout.setSpacing(15)
+        
+        title = QLabel("📈 NEURAL BINARY SIGNALS")
+        title.setStyleSheet("font-size: 28px; font-weight: bold; color: #cba6f7;")
+        top_layout.addWidget(title)
+        top_layout.addStretch()
+        
+        top_layout.addWidget(QLabel("Ativo:"))
+        self.symbol_combo = QComboBox()
+        self.symbol_combo.addItems(self.symbols)
+        self.symbol_combo.currentTextChanged.connect(self.change_symbol)
+        top_layout.addWidget(self.symbol_combo)
+        
+        top_layout.addWidget(QLabel("Timeframe:"))
+        self.timeframe_combo = QComboBox()
+        self.timeframe_combo.addItems(self.timeframes)
+        self.timeframe_combo.currentTextChanged.connect(self.change_timeframe)
+        top_layout.addWidget(self.timeframe_combo)
+        
+        self.start_btn = QPushButton("▶ Iniciar")
+        self.start_btn.clicked.connect(self.start_all)
+        top_layout.addWidget(self.start_btn)
+        
+        self.stop_btn = QPushButton("⏹ Parar")
+        self.stop_btn.clicked.connect(self.stop_all)
+        top_layout.addWidget(self.stop_btn)
+        
+        layout.addWidget(top_frame)
+        
+        # CORPO: 3 COLUNAS
+        body = QHBoxLayout()
+        body.setSpacing(15)
+        
+        left = self.create_live_signals()
+        body.addWidget(left, 1)
+        
+        center = self.create_signal_detail()
+        body.addWidget(center, 1)
+        
+        right = self.create_history()
+        body.addWidget(right, 1)
+        
+        layout.addLayout(body, 1)
+    
+    def create_live_signals(self):
+        group = QGroupBox("📊 Sinais ao Vivo")
+        layout = QVBoxLayout(group)
+        
+        self.signal_table = QTableWidget()
+        self.signal_table.setColumnCount(4)
+        self.signal_table.setHorizontalHeaderLabels(["Ativo", "Sinal", "Confiança", "Hora"])
+        self.signal_table.horizontalHeader().setStretchLastSection(True)
+        self.signal_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        layout.addWidget(self.signal_table)
+        
+        self.update_table()
+        return group
+    
+    def create_signal_detail(self):
+        group = QGroupBox("📋 Detalhes do Sinal")
+        layout = QVBoxLayout(group)
+        
+        self.detail_text = QTextEdit()
+        self.detail_text.setReadOnly(True)
+        self.detail_text.setStyleSheet("""
+            QTextEdit {
+                background-color: #1e1e2e;
+                color: #cdd6f4;
+                border: none;
+                font-size: 14px;
+                font-family: 'Courier New';
+            }
         """)
+        self.detail_text.setText("Aguardando sinal...")
+        layout.addWidget(self.detail_text)
+        
+        return group
+    
+    def create_history(self):
+        group = QGroupBox("📜 Histórico")
+        layout = QVBoxLayout(group)
+        
+        self.history_list = QListWidget()
+        self.history_list.setStyleSheet("""
+            QListWidget {
+                background-color: #1e1e2e;
+                color: #cdd6f4;
+                border: none;
+                font-size: 13px;
+            }
+        """)
+        layout.addWidget(self.history_list)
+        
+        clear_btn = QPushButton("🗑 Limpar Histórico")
+        clear_btn.clicked.connect(self.clear_history)
+        layout.addWidget(clear_btn)
+        
+        return group
+    
+    def update_table(self):
+        self.signal_table.setRowCount(len(self.symbols))
+        for i, symbol in enumerate(self.symbols):
+            self.signal_table.setItem(i, 0, QTableWidgetItem(symbol))
+            self.signal_table.setItem(i, 1, QTableWidgetItem("⏳..."))
+            self.signal_table.setItem(i, 2, QTableWidgetItem("0%"))
+            self.signal_table.setItem(i, 3, QTableWidgetItem("--:--:--"))
+    
+    def change_symbol(self, symbol):
+        self.selected_symbol = symbol
+        self.restart_workers()
+    
+    def change_timeframe(self, timeframe):
+        self.selected_timeframe = timeframe
+        self.restart_workers()
+    
+    def start_all(self):
+        self.stop_all()
+        for symbol in self.symbols:
+            worker = SignalWorker(self.engine, symbol, self.selected_timeframe)
+            worker.signal_ready.connect(self.on_signal_received)
+            worker.start()
+            self.workers[symbol] = worker
+    
+    def stop_all(self):
+        for worker in self.workers.values():
+            worker.stop()
+        self.workers.clear()
+    
+    def restart_workers(self):
+        self.start_all()
+    
+    def on_signal_received(self, data):
+        symbol = data['symbol']
+        signal_type = data['type']
+        confidence = data['confidence']
+        time_str = data['timestamp']
+        
+        for i in range(self.signal_table.rowCount()):
+            if self.signal_table.item(i, 0).text() == symbol:
+                color = "#a6e3a1" if signal_type == "CALL" else "#f38ba8"
+                item = QTableWidgetItem(signal_type)
+                item.setForeground(QColor(color))
+                self.signal_table.setItem(i, 1, item)
+                
+                conf_item = QTableWidgetItem(f"{confidence:.1%}")
+                conf_item.setForeground(QColor("#cba6f7"))
+                self.signal_table.setItem(i, 2, conf_item)
+                
+                self.signal_table.setItem(i, 3, QTableWidgetItem(time_str))
+                break
+        
+        if symbol == self.selected_symbol:
+            details = f"""
+            🎯 **SINAL DETECTADO**
+            
+            Ativo: {symbol}
+            Sinal: {signal_type}
+            Confiança: {confidence:.1%}
+            Força: {data['strength']}
+            Hora: {time_str}
+            
+            📊 **ANÁLISE:**
+            {chr(10).join('• ' + r for r in data['reasons'])}
+            """
+            self.detail_text.setText(details)
+        
+        history_item = f"[{time_str}] {symbol} → {signal_type} ({confidence:.1%})"
+        self.history_list.insertItem(0, history_item)
+        if self.history_list.count() > 100:
+            self.history_list.takeItem(self.history_list.count() - 1)
+    
+    def clear_history(self):
+        self.history_list.clear()
 
-    def start_analysis(self):
-        pairs = [self.pair_combo.currentText()]
-        tf = self.tf_combo.currentText()
 
-        self.worker = SignalWorker(self.engine, pairs, tf)
-        self.worker.signal_ready.connect(self.on_signal)
-        self.worker.stats_update.connect(self.on_stats_update)
-        self.worker.start()
-
-        self.status_label.setText("ONLINE")
-        self.status_label.setStyleSheet("color: #00ff88; font-weight: bold;")
-        self.start_btn.setEnabled(False)
-        self.stop_btn.setEnabled(True)
-        self.log("Analise iniciada")
-
-    def stop_analysis(self):
-        if self.worker:
-            self.worker.stop()
-            self.worker.wait()
-
-        self.status_label.setText("OFFLINE")
-        self.status_label.setStyleSheet("color: #ff4444; font-weight: bold;")
-        self.start_btn.setEnabled(True)
-        self.stop_btn.setEnabled(False)
-        self.log("Analise parada")
-
-    def on_signal(self, signal: dict):
-        direction = signal["direction"]
-        confidence = signal["confidence"]
-
-        self.signal_direction.setText(direction)
-        color = "#00ff88" if direction == "CALL" else "#ff4444"
-        self.signal_direction.setStyleSheet(f"color: {color};")
-
-        self.signal_pair.setText(f"{signal['pair']} | {signal['timeframe']}")
-        self.signal_confidence.setValue(int(confidence))
-
-        reasons = "\n".join(f"- {r}" for r in signal["reasons"])
-        self.signal_reasons.setText(reasons)
-
-        self.add_to_history(signal)
-        self.notifier.notify_signal(signal)
-        self.manager.add_signal(signal)
-        self.log(f"SINAL: {direction} {signal['pair']} @ {confidence}%")
-
-    def on_stats_update(self, stats: dict):
-        self.stats_labels["Sinais Hoje:"].setText(str(stats.get("daily_signals", 0)))
-        self.stats_labels["Memoria Ativa:"].setText(str(stats.get("total_patterns_memory", 0)))
-
-    def add_to_history(self, signal: dict):
-        row = self.history_table.rowCount()
-        self.history_table.insertRow(row)
-
-        self.history_table.setItem(row, 0, QTableWidgetItem(datetime.now().strftime("%H:%M:%S")))
-        self.history_table.setItem(row, 1, QTableWidgetItem(signal["pair"]))
-
-        dir_item = QTableWidgetItem(signal["direction"])
-        dir_item.setForeground(QColor("#00ff88" if signal["direction"] == "CALL" else "#ff4444"))
-        self.history_table.setItem(row, 2, dir_item)
-
-        self.history_table.setItem(row, 3, QTableWidgetItem(f"{signal['confidence']}%"))
-        self.history_table.setItem(row, 4, QTableWidgetItem("PENDENTE"))
-        self.history_table.setItem(row, 5, QTableWidgetItem(
-            signal.get("snapshot", {}).get("candlestick_patterns", ["-"])[0]
-        ))
-
-    def update_ui(self):
-        pass
-
-    def log(self, message: str):
-        timestamp = datetime.now().strftime("%H:%M:%S")
-        self.log_text.append(f"[{timestamp}] {message}")
-
-    def closeEvent(self, event):
-        self.stop_analysis()
-        event.accept()
-
-
-def launch_dashboard():
+def run_dashboard():
     app = QApplication(sys.argv)
-    dashboard = SignalDashboard()
-    dashboard.show()
+    app.setStyle('Fusion')
+    window = Dashboard()
+    window.show()
     sys.exit(app.exec())
+
+
+if __name__ == "__main__":
+    run_dashboard()

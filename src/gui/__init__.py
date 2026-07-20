@@ -1,4 +1,8 @@
-"""Neural Binary Signals - GUI Module"""
-from .dashboard import SignalDashboard
+"""
+GUI Module - Interface gráfica
+"""
 
-__all__ = ["SignalDashboard"]
+from .dashboard import Dashboard, run_dashboard
+from .overlay import SignalOverlay, run_overlay
+
+__all__ = ['Dashboard', 'run_dashboard', 'SignalOverlay', 'run_overlay']
