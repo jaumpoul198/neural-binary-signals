@@ -1,10 +1,7 @@
 """
-Neural Binary Signals - Core Module
-Motor central de processamento de dados de mercado.
+Core module - Motor central do sistema
 """
 
-from .market_data import MarketDataEngine
-from .snapshot import MarketSnapshot
-from .engine import SignalEngine
+from .engine import DecisionEngine
 
-__all__ = ["MarketDataEngine", "MarketSnapshot", "SignalEngine"]
+__all__ = ['DecisionEngine']
